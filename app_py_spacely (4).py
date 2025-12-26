@@ -87,45 +87,54 @@ def consolidated_prioritized_greedy_selection_with_quantities(df, budget, desire
 # 3. Parsing Function
 def parse_user_prompt(prompt, df):
     prompt = prompt.lower()
-
     categories = df['category'].str.lower().unique()
 
-    # Ambil semua angka (25.000 → 25000)
-    numbers = re.findall(r'\d{1,3}(?:\.\d{3})+|\d+', prompt)
-    if not numbers:
+    # Ambil semua angka beserta posisinya
+    number_matches = [
+        {
+            "value": int(m.group().replace('.', '')),
+            "start": m.start(),
+            "end": m.end()
+        }
+        for m in re.finditer(r'\d{1,3}(?:\.\d{3})+|\d+', prompt)
+    ]
+
+    if not number_matches:
         return None, None, "Budget tidak ditemukan."
 
-    cleaned_numbers = [int(n.replace('.', '')) for n in numbers]
-
     # Budget = angka TERBESAR
-    budget = max(cleaned_numbers)
+    budget_item = max(number_matches, key=lambda x: x['value'])
+    budget = budget_item['value']
+
+    # Hapus budget dari kandidat quantity
+    quantity_numbers = [
+        n for n in number_matches if n != budget_item
+    ]
 
     desired = []
 
     for cat in categories:
-        # Cari posisi kategori
-        for match in re.finditer(rf'\b{cat}\b', prompt):
-            cat_pos = match.start()
+        for cat_match in re.finditer(rf'\b{cat}\b', prompt):
+            cat_pos = cat_match.start()
 
-            # Cari angka terdekat sebelum & sesudah
-            nearest_qty = None
+            nearest = None
             min_distance = float('inf')
 
-            for num_match in re.finditer(r'\d+', prompt):
-                num = int(num_match.group())
-                if num == budget:
-                    continue  # skip budget
-
+            for num in quantity_numbers:
                 distance = min(
-                    abs(num_match.start() - cat_pos),
-                    abs(num_match.end() - cat_pos)
+                    abs(num['start'] - cat_pos),
+                    abs(num['end'] - cat_pos)
                 )
 
                 if distance < min_distance:
                     min_distance = distance
-                    nearest_qty = num
+                    nearest = num
 
-            qty = nearest_qty if nearest_qty else 1
+            if nearest:
+                qty = nearest['value']
+                quantity_numbers.remove(nearest)  # 🔥 PENTING
+            else:
+                qty = 1
 
             desired.append({
                 "category": cat,
