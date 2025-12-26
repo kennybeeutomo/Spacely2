@@ -87,32 +87,29 @@ def consolidated_prioritized_greedy_selection_with_quantities(df, budget, desire
 # 3. Parsing Function
 def parse_user_prompt(prompt, df):
     prompt_lower = prompt.lower()
-
     categories = df['category'].str.lower().unique()
 
-    # Ambil semua angka (misal: 25.000, 25000, 1, 2)
+    # 1️⃣ Ambil semua angka
     numbers = re.findall(r'\d{1,3}(?:\.\d{3})+|\d+', prompt_lower)
-
     if not numbers:
         return None, None, "Budget tidak ditemukan."
 
-    # Bersihkan angka → integer
-    cleaned_numbers = [int(n.replace('.', '')) for n in numbers]
+    values = [int(n.replace('.', '')) for n in numbers]
 
-    # Budget = angka TERBESAR
-    budget = max(cleaned_numbers)
+    # 2️⃣ Budget = angka TERBESAR
+    budget = max(values)
 
-    # Quantity = angka kecil (1–9), default 1
-    quantities = [n for n in cleaned_numbers if n < 10]
-    quantity = quantities[0] if quantities else 1
-
-    # Deteksi kategori
+    # 3️⃣ Deteksi kategori + quantity (PER KATEGORI)
     desired = []
+
     for cat in categories:
-        if re.search(rf'\b{cat}\b', prompt_lower):
+        # cari "table 2" atau "table"
+        match = re.search(rf'\b{cat}\b\s*(\d+)?', prompt_lower)
+        if match:
+            qty = int(match.group(1)) if match.group(1) else 1
             desired.append({
                 "category": cat,
-                "quantity": quantity
+                "quantity": qty
             })
 
     return budget, desired, None
@@ -225,7 +222,6 @@ if st.button("Generate Recommendations"):
 
             if results:
                 result_df = pd.DataFrame(results)
-                st.subheader("Rekomendasi Furniture")
 
                 for item in results:
                     icon = ICON_MAP.get(item['category'].lower(), "🛒")
