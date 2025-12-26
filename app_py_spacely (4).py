@@ -222,10 +222,10 @@ if st.button("Generate Recommendations"):
             st.subheader("Recommendation Results")
 
             results, total_cost, messages = select_furniture_based_on_request(
-              df, user_budget, user_desired_categories,
-              remaining_budget = user_budget - total_cost
+              df, user_budget, user_desired_categories
             )
-
+            
+            remaining_budget = user_budget - total_cost
             for msg in messages:
                 st.info(msg)
 
