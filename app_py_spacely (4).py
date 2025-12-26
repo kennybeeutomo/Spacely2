@@ -132,7 +132,7 @@ def parse_user_prompt(prompt, df):
 
             if nearest:
                 qty = nearest['value']
-                quantity_numbers.remove(nearest)  # 🔥 PENTING
+                quantity_numbers.remove(nearest)  
             else:
                 qty = 1
 
@@ -202,7 +202,7 @@ st.header("Chat Input")
 
 user_prompt = st.text_input(
     "Masukkan kebutuhan furniture Anda (budget WAJIB)",
-    placeholder="Contoh: Budget Rp 500000, bed 2, chair"
+    placeholder="Contoh: Budget Rp 5000000, bed 2, chair (min 820.000)"
 )
 
 # Button to trigger recommendations
