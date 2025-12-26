@@ -10,9 +10,19 @@ Original file is located at
 import streamlit as st
 import pandas as pd
 
+ICON_MAP = {
+    "table": "🪑",
+    "chair": "💺",
+    "sofa": "🛋️",
+    "desk": "🖥️",
+    "bed": "🛏️"
+}
+
 # 1. Load DataFrame from CSV file
 github_csv_url = 'https://raw.githubusercontent.com/Ertyuuu55/Spacely/main/Furniture%20(1).csv'
 df = pd.read_csv(github_csv_url) # Pass the variable, not a string literal
+def format_rupiah(angka):
+    return f"Rp{int(angka):,}".replace(",", ".")
 
 # 2. Consolidated Prioritized Greedy Selection Function (copied from notebook)
 def consolidated_prioritized_greedy_selection_with_quantities(df, budget, desired_categories_with_quantities):
@@ -86,24 +96,34 @@ def consolidated_prioritized_greedy_selection_with_quantities(df, budget, desire
 import re
 
 def parse_user_prompt(prompt, df):
-    prompt = prompt.lower()
-    categories = df['category'].unique()
+    prompt_lower = prompt.lower()
 
-    #a. Budget WAJIB
-    budget_match = re.search(r'(\d+)', prompt)
-    if not budget_match:
-        return None, None, "Budget tidak ditemukan dalam input."
+    categories = df['category'].str.lower().unique()
 
-    budget = float(budget_match.group(1))
+    # Ambil semua angka (misal: 25.000, 25000, 1, 2)
+    numbers = re.findall(r'\d{1,3}(?:\.\d{3})+|\d+', prompt_lower)
 
-    #b. Category + quantity (OPSIONAL)
+    if not numbers:
+        return None, None, "Budget tidak ditemukan."
+
+    # Bersihkan angka → integer
+    cleaned_numbers = [int(n.replace('.', '')) for n in numbers]
+
+    # Budget = angka TERBESAR
+    budget = max(cleaned_numbers)
+
+    # Quantity = angka kecil (1–9), default 1
+    quantities = [n for n in cleaned_numbers if n < 10]
+    quantity = quantities[0] if quantities else 1
+
+    # Deteksi kategori
     desired = []
     for cat in categories:
-        cat_lower = cat.lower()
-        if cat_lower in prompt:
-            qty_match = re.search(rf'{cat_lower}\s*(\d+)', prompt)
-            qty = int(qty_match.group(1)) if qty_match else 1
-            desired.append({"category": cat, "quantity": qty})
+        if re.search(rf'\b{cat}\b', prompt_lower):
+            desired.append({
+                "category": cat,
+                "quantity": quantity
+            })
 
     return budget, desired, None
 
@@ -161,54 +181,12 @@ st.set_page_config(layout="centered", page_title="Furniture Recommender")
 st.title("Furniture Recommendation System")
 st.write("Enter your budget and desired furniture categories with quantities to get recommendations.")
 
-# # Input for budget
-# user_budget = st.number_input("Enter your total budget ($):", min_value=0.0, value=300.0, step=10.0)
-
-# # Get unique categories from the DataFrame for display
-# available_categories_str = ', '.join(df['category'].unique())
-
-# # Input for categories and quantities
-# user_categories_quantities_input = st.text_input(
-#     f"Enter desired furniture categories (e.g., Bed, Chair:2). Options: {available_categories_str}",
-#     value="Bed, Desk:5"
-# )
 st.header("Chat Input")
 
 user_prompt = st.text_input(
     "Masukkan kebutuhan furniture Anda (budget WAJIB)",
-    placeholder="Contoh: Budget 500, bed 2, chair"
+    placeholder="Contoh: Budget 25000, bed 2, chair"
 )
-
-# Process user categories and quantities input
-# user_desired_categories_with_quantities = []
-# if user_categories_quantities_input:
-#     for item_str in user_categories_quantities_input.split(','):
-#         item_str = item_str.strip()
-#         if not item_str:
-#             continue
-
-#         parts = item_str.split(':')
-#         category = parts[0].strip()
-#         quantity = 1 # Default quantity if not specified
-
-#         if category not in df['category'].unique():
-#             st.warning(f"Warning: Category '{category}' is not a valid option and will be ignored.")
-#             continue
-
-#         if len(parts) == 1:
-#             # Only category provided, use default quantity = 1
-#             user_desired_categories_with_quantities.append({"category": category, "quantity": quantity})
-#         elif len(parts) == 2:
-#             try:
-#                 quantity = int(parts[1].strip())
-#                 if quantity <= 0:
-#                     st.warning(f"Warning: Quantity for '{category}' must be a positive integer. Ignoring '{item_str}'.")
-#                     continue
-#                 user_desired_categories_with_quantities.append({"category": category, "quantity": quantity})
-#             except ValueError:
-#                 st.warning(f"Warning: Quantity for '{category}' is not a valid number and will be ignored. Please enter an integer.")
-#         else:
-#             st.warning(f"Warning: Invalid input format for '{item_str}'. Please use 'Category' or 'Category:Quantity'.")
 
 # Button to trigger recommendations
 if st.button("Generate Recommendations"):
@@ -245,6 +223,7 @@ if st.button("Generate Recommendations"):
 
             results, total_cost, messages = select_furniture_based_on_request(
               df, user_budget, user_desired_categories
+              remaining_budget = user_budget - total_cost
             )
 
             for msg in messages:
@@ -252,22 +231,26 @@ if st.button("Generate Recommendations"):
 
             if results:
                 result_df = pd.DataFrame(results)
-                # st.dataframe(
-                #     result_df[['category', 'price', 'material', 'color']]
-                #     .style.format({'price': '${:.2f}'})
-                # )
                 st.subheader("Rekomendasi Furniture")
 
                 for item in results:
+                    icon = ICON_MAP.get(item['category'].lower(), "🛒")
                     st.markdown(f"""
                     <div class="furniture-card">
-                        <div class="furniture-title">🪑 {item['category']}</div>
-                        <div class="furniture-item"><b>Harga:</b> ${item['price']:.2f}</div>
+                        <div class="furniture-title">{icon} {item['category'].capitalize()}</div>
+                        <div class="furniture-item"><b>Harga:</b> Rp{int(item['price']):,}</div>
                         <div class="furniture-item"><b>Material:</b> {item['material']}</div>
                         <div class="furniture-item"><b>Warna:</b> {item['color']}</div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """.replace(",", "."), unsafe_allow_html=True)
 
-                st.success(f"Total Cost: ${total_cost:.2f}")
+                st.success(f"Total Biaya: {format_rupiah(total_cost)}")
+
+                if remaining_budget > 0:
+                    st.info(f"Sisa Budget Anda: {format_rupiah(remaining_budget)}")
+                elif remaining_budget == 0:
+                    st.info("Budget Anda pas.")
+                else:
+                    st.warning("Budget tidak mencukupi")
             else:
                 st.warning("Tidak ada furniture yang bisa direkomendasikan.")
