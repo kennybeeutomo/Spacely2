@@ -125,9 +125,7 @@ def select_furniture_based_on_request(df, budget, requested_items):
                     selected_items.append(item.to_dict())
                     total_cost += item['price']
                 else:
-                    messages.append(
-                        f"Budget tidak cukup untuk mengambil {cat} (harga ${item['price']:.2f})"
-                    )
+                   messages.append("Budget tidak mencukupi")
 
         messages.append("Menampilkan 1 item termurah dari setiap kategori furniture.")
         return selected_items, total_cost, messages
