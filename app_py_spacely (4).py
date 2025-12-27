@@ -170,25 +170,38 @@ def select_furniture_based_on_request(df, budget, requested_items):
     for req in requested_items:
         category = req['category']
         qty = req['quantity']
-
+    
         cat_items = df[df['category'].str.lower() == category.lower()].sort_values('price')
-
+    
         if cat_items.empty:
             messages.append(f"Tidak ada item untuk kategori {category}")
             continue
-
+    
         selected_qty = 0
+    
         for _, row in cat_items.iterrows():
             if selected_qty >= qty:
                 break
+    
             if total_cost + row['price'] <= budget:
                 selected_items.append(row.to_dict())
                 total_cost += row['price']
                 selected_qty += 1
-
-        if selected_qty > 0:
+            else:
+                break  # budget sudah tidak cukup, hentikan
+    
+        # 🔴 LOGIKA PESAN (INI YANG BARU)
+        if selected_qty == 0:
             messages.append(
-                f"Menampilkan {selected_qty} item untuk kategori '{category}'."
+                f"Budget tidak mencukupi untuk kategori '{category}' sebanyak {qty} item."
+            )
+        elif selected_qty < qty:
+            messages.append(
+                f"Budget hanya cukup untuk {selected_qty} dari {qty} item kategori '{category}'."
+            )
+        else:
+            messages.append(
+                f"Berhasil memilih {qty} item untuk kategori '{category}'."
             )
 
     return selected_items, total_cost, messages
