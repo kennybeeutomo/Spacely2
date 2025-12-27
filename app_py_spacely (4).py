@@ -86,40 +86,59 @@ def consolidated_prioritized_greedy_selection_with_quantities(df, budget, desire
 
 # 3. Parsing Function
 def parse_user_prompt(prompt, df):
-    prompt = prompt.lower()
-    categories = df['category'].str.lower().unique()
+    tokens = prompt.lower().split()
+    categories = set(df['category'].str.lower().unique())
 
-    # Ambil semua angka (budget + quantity)
-    numbers = re.findall(r'\d{1,3}(?:\.\d{3})+|\d+', prompt)
-    if not numbers:
+    budget = None
+    desired = {}
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+
+        # angka
+        if token.replace('.', '').isdigit():
+            number = int(token.replace('.', ''))
+
+            # angka besar → budget
+            if number >= 10000 and budget is None:
+                budget = number
+                i += 1
+                continue
+
+            # angka kecil → cek next token (2 bed)
+            if i + 1 < len(tokens) and tokens[i + 1] in categories:
+                cat = tokens[i + 1]
+                if cat not in desired:
+                    desired[cat] = number
+                i += 2
+                continue
+
+        # kategori → cek next token (bed 2)
+        if token in categories:
+            if i + 1 < len(tokens) and tokens[i + 1].replace('.', '').isdigit():
+                qty = int(tokens[i + 1].replace('.', ''))
+                if token not in desired:
+                    desired[token] = qty
+                i += 2
+                continue
+
+            # kategori tanpa jumlah → default 1
+            if token not in desired:
+                desired[token] = 1
+            i += 1
+            continue
+
+        i += 1
+
+    if budget is None:
         return None, None, "Budget tidak ditemukan."
 
-    cleaned_numbers = [int(n.replace('.', '')) for n in numbers]
-    budget = max(cleaned_numbers)
+    desired_list = [
+        {"category": k, "quantity": v} for k, v in desired.items()
+    ]
 
-    desired = []
-    used_spans = []  # untuk mencegah angka dipakai dua kali
-
-    for cat in categories:
-        # Pola 1: chair 2
-        for match in re.finditer(rf'\b{cat}\s+(\d+)', prompt):
-            if match.span() not in used_spans:
-                desired.append({
-                    "category": cat,
-                    "quantity": int(match.group(1))
-                })
-                used_spans.append(match.span())
-
-        # Pola 2: 2 chair
-        for match in re.finditer(rf'(\d+)\s+{cat}\b', prompt):
-            if match.span() not in used_spans:
-                desired.append({
-                    "category": cat,
-                    "quantity": int(match.group(1))
-                })
-                used_spans.append(match.span())
-
-    return budget, desired, None
+    return budget, desired_list, None
 
 # 4. Pemanggilan Output
 def select_furniture_based_on_request(df, budget, requested_items):
