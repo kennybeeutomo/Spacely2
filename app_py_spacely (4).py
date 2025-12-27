@@ -86,60 +86,62 @@ def consolidated_prioritized_greedy_selection_with_quantities(df, budget, desire
 
 # 3. Parsing Function
 def parse_user_prompt(prompt, df):
-    tokens = prompt.lower().split()
-    categories = set(df['category'].str.lower().unique())
+    prompt = prompt.lower()
+    categories = df['category'].str.lower().unique()
 
-    budget = None
-    desired = {}
-
-    i = 0
-    while i < len(tokens):
-        token = tokens[i]
-
-        # Jika token angka
-        if token.replace('.', '').isdigit():
-            num = int(token.replace('.', ''))
-
-            # Cek pola: 2 bed
-            if i + 1 < len(tokens) and tokens[i + 1] in categories:
-                cat = tokens[i + 1]
-                if cat not in desired:
-                    desired[cat] = num
-                i += 2
-                continue
-
-            # Kandidat budget
-            if budget is None or num > budget:
-                budget = num
-            i += 1
-            continue
-
-        # Jika token kategori
-        if token in categories:
-            # Cek pola: bed 2
-            if i + 1 < len(tokens) and tokens[i + 1].replace('.', '').isdigit():
-                qty = int(tokens[i + 1].replace('.', ''))
-                if token not in desired:
-                    desired[token] = qty
-                i += 2
-                continue
-
-            # Default quantity = 1
-            if token not in desired:
-                desired[token] = 1
-            i += 1
-            continue
-
-        i += 1
-
-    if budget is None:
-        return None, None, "Budget tidak ditemukan."
-
-    desired_list = [
-        {"category": k, "quantity": v} for k, v in desired.items()
+    # Ambil semua angka beserta posisinya
+    number_matches = [
+        {
+            "value": int(m.group().replace('.', '')),
+            "start": m.start(),
+            "end": m.end()
+        }
+        for m in re.finditer(r'\d{1,3}(?:\.\d{3})+|\d+', prompt)
     ]
 
-    return budget, desired_list, None
+    if not number_matches:
+        return None, None, "Budget tidak ditemukan."
+
+    # Budget = angka TERBESAR
+    budget_item = max(number_matches, key=lambda x: x['value'])
+    budget = budget_item['value']
+
+    # Hapus budget dari kandidat quantity
+    quantity_numbers = [
+        n for n in number_matches if n != budget_item
+    ]
+
+    desired = []
+
+    for cat in categories:
+        for cat_match in re.finditer(rf'\b{cat}\b', prompt):
+            cat_pos = cat_match.start()
+
+            nearest = None
+            min_distance = float('inf')
+
+            for num in quantity_numbers:
+                distance = min(
+                    abs(num['start'] - cat_pos),
+                    abs(num['end'] - cat_pos)
+                )
+
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest = num
+
+            if nearest:
+                qty = nearest['value']
+                quantity_numbers.remove(nearest)  
+            else:
+                qty = 1
+
+            desired.append({
+                "category": cat,
+                "quantity": qty
+            })
+
+    return budget, desired, None
 
 # 4. Pemanggilan Output
 def select_furniture_based_on_request(df, budget, requested_items):
@@ -274,7 +276,7 @@ if st.button("Generate Recommendations"):
                     ].sort_values('price').head(3)
                     
                     if not suggestions.empty:
-                        st.markdown("💡 **Dengan sisa budget ini, Anda masih bisa membeli:**")
+                        st.markdown("💡 *Dengan sisa budget ini, Anda masih bisa membeli:*")
                         for _, row in suggestions.iterrows():
                             icon = ICON_MAP.get(row['category'].lower(), "🛒")
                             st.write(f"- {icon} {row['category'].capitalize()} — {format_rupiah(row['price'] * USD_TO_IDR)}")
