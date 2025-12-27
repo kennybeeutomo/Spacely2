@@ -89,57 +89,35 @@ def parse_user_prompt(prompt, df):
     prompt = prompt.lower()
     categories = df['category'].str.lower().unique()
 
-    # Ambil semua angka beserta posisinya
-    number_matches = [
-        {
-            "value": int(m.group().replace('.', '')),
-            "start": m.start(),
-            "end": m.end()
-        }
-        for m in re.finditer(r'\d{1,3}(?:\.\d{3})+|\d+', prompt)
-    ]
-
-    if not number_matches:
+    # Ambil semua angka (budget + quantity)
+    numbers = re.findall(r'\d{1,3}(?:\.\d{3})+|\d+', prompt)
+    if not numbers:
         return None, None, "Budget tidak ditemukan."
 
-    # Budget = angka TERBESAR
-    budget_item = max(number_matches, key=lambda x: x['value'])
-    budget = budget_item['value']
-
-    # Hapus budget dari kandidat quantity
-    quantity_numbers = [
-        n for n in number_matches if n != budget_item
-    ]
+    cleaned_numbers = [int(n.replace('.', '')) for n in numbers]
+    budget = max(cleaned_numbers)
 
     desired = []
+    used_spans = []  # untuk mencegah angka dipakai dua kali
 
     for cat in categories:
-        for cat_match in re.finditer(rf'\b{cat}\b', prompt):
-            cat_pos = cat_match.start()
+        # Pola 1: chair 2
+        for match in re.finditer(rf'\b{cat}\s+(\d+)', prompt):
+            if match.span() not in used_spans:
+                desired.append({
+                    "category": cat,
+                    "quantity": int(match.group(1))
+                })
+                used_spans.append(match.span())
 
-            nearest = None
-            min_distance = float('inf')
-
-            for num in quantity_numbers:
-                distance = min(
-                    abs(num['start'] - cat_pos),
-                    abs(num['end'] - cat_pos)
-                )
-
-                if distance < min_distance:
-                    min_distance = distance
-                    nearest = num
-
-            if nearest:
-                qty = nearest['value']
-                quantity_numbers.remove(nearest)  
-            else:
-                qty = 1
-
-            desired.append({
-                "category": cat,
-                "quantity": qty
-            })
+        # Pola 2: 2 chair
+        for match in re.finditer(rf'(\d+)\s+{cat}\b', prompt):
+            if match.span() not in used_spans:
+                desired.append({
+                    "category": cat,
+                    "quantity": int(match.group(1))
+                })
+                used_spans.append(match.span())
 
     return budget, desired, None
 
